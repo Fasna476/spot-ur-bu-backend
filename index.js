@@ -80,6 +80,7 @@ app.get('/buses', async (req, res) => {
   try {
     const buses = await busModel.find()// Populate route details if needed
     res.json(buses);
+    console.log("bus ok")
   } catch (error) {
     res.status(500).json({ message: 'Error fetching buses', error });
   }
@@ -176,16 +177,49 @@ app.delete('/buses/delete/:id', async (req, res) => {
   app.post('/addSchedule', async (req, res) => {
     try {
       const { busId, routeId, stopTimes,direction } = req.body;
+      if (!busId || !routeId || !direction || !Array.isArray(stopTimes)) {
+        return res.status(400).json({ message: 'Missing required fields or invalid format.' });
+      }
       if (!['forward', 'backward'].includes(direction)) {
         return res.status(400).json({ message: 'Invalid direction' });
       }
+      stopTimes.forEach((stop) => {
+        if (!stop.stopName || !stop.arrivalTime) {
+          throw new Error('Invalid stopTimes format. Each stop must have stopName and arrivalTime.');
+        }
+      });
+      console.log("schedule adding")
       const schedule = new scheduleModel({ busId, routeId, stopTimes,direction });
       await schedule.save();
       res.json(schedule);
     } catch (error) {
+      console.error('Error while adding schedule:', error.message);
       res.json({ message: 'Error adding schedule', error });
     }
   });
+
+  
+  
+  // Get all schedules
+  app.get('/schedules', async (req, res) => {
+    try {
+      const schedules = await scheduleModel.find()
+        .populate('busId', 'name') // Populate only the `name` field
+        .populate('routeId', 'name'); // Populate only the `name` field
+  
+        if (!schedules) {
+          return res.status(404).json({ message: 'No schedules found' });
+        }
+      res.status(200).json(schedules);
+  } catch (error) {
+    console.error('Error fetching schedules:', error.message);
+    res.status(500).json({ message: 'Error fetching schedules', error: error.message });
+  }
+  });
+  
+
+    
+
 
 // Get schedule by bus ID
 app.get('/schedule/:busId', async (req, res) => {
@@ -240,6 +274,29 @@ app.delete('/schedules/delete/:id', async (req, res) => {
   }
 });
 
+app.get('/routes/:routeId/stops', async (req, res) => {
+  try {
+    const { routeId } = req.params;
+
+    // Fetch the route by ID, including its stops
+    const route = await routeModel.findById(routeId);
+    console.log("Route fetched:", route);
+    if (!mongoose.isValidObjectId(routeId)) {
+      return res.status(400).json({ message: 'Invalid route ID' });
+    }
+    if (!route) {
+      return res.status(404).json({ message: 'Route not found' });
+    }
+    if (!route.stops || route.stops.length === 0) {
+      return res.status(404).json({ message: 'No stops found for this route' });
+    }
+    // Send the stops from the route
+    res.json(route.stops);
+  } catch (error) {
+    console.error('Error fetching stops for route:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
   app.get('/api/busDetails', async (req, res) => {
     try {
